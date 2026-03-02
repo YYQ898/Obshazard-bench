@@ -285,7 +285,7 @@ def evaluate_dataset():
     # # 随机打乱数据集，并取前20条数据，用于调试
     # random.seed(42)
     # random.shuffle(dataset)
-    # dataset = dataset[:1]
+    # dataset = dataset[:10]
     print(f"Loaded {len(dataset)} items from {TARGET_FILE}")
     
     # save results to file
@@ -305,7 +305,7 @@ def evaluate_dataset():
                         dataset.remove(item)
                 print(f"Remaining {len(dataset)} items to evaluate in dataset after resume.")
     else:
-        OUTPUT_FILE = f"eval_result_{BASE_NAME}_{MODEL_NAME}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        OUTPUT_FILE = f"eval_result_{BASE_NAME}_{MODEL_NAME}_{TARGET_FILE}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         OUTPUT_FILE = os.path.join(OUTPUT_ROOT, OUTPUT_FILE)
     
     # 1. 构建请求的参数
@@ -315,16 +315,19 @@ def evaluate_dataset():
         stations_data = item.get("Stations", None)
         gt = str(item.get("Ground truth", ""))
 
+        # system prompt
         system_prompt = "You are an expert AI for disaster assessment from satellite imagery and station data.\n"
         if metadata_context:
             system_prompt += metadata_context
 
+        # user prompt
+        # images data
         user_content = []
         img_msgs, paths = prepare_image_messages(images_str, RAW_DATA_BASE_PATH, TOTAL_MAX_SIZE, IMAGE_MAX_NUM)
         if image_with_prefix == True:
             for each_img_msg, each_path in zip(img_msgs, paths):
                 path_split = each_path.split('/')
-                day = path_split[-1]
+                day = path_split[-1].split('.')[0]
                 band = path_split[-2]
                 sensor = path_split[-3]
                 user_content.append({"type": "text", "text": f"Image of Satellite Sensor: {sensor}, Band: {band}, Day: {day}"})
@@ -332,16 +335,18 @@ def evaluate_dataset():
         else:
             user_content.extend(img_msgs)
         
-        # assess the risk of an impending disaster should answer "Yes" / "No"
-        if 'assess the risk of an impending disaster' in question:
-            question += "Answer yes or no: yes means a disaster will occur, no means no disaster will occur."
-            
-        user_content.append({"type": "text", "text": f"Task Instruction: {question}"})
-
+        # stations data
         if stations_data:
             st_text = format_station_data(stations_data)
             user_content.append({"type": "text", "text": f"Station Data Context:\n{st_text}"})
+        
+        # task instruction
+        if 'assess the risk of an impending disaster' in question:
+            # assess the risk of an impending disaster should answer "Yes" / "No"
+            question += "Answer yes or no: yes means a disaster will occur, no means no disaster will occur."
+        user_content.append({"type": "text", "text": f"Task Instruction: {question}"})
 
+        # output requirement
         user_content.append({"type": "text", "text": 
             "\nOutput Requirement:\n"
             "Please analyze the inputs and provide the answer.\n"
