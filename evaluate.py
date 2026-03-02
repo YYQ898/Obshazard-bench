@@ -152,7 +152,8 @@ def prepare_image_messages(
     image_rel_paths: str, 
     base_path: str, 
     total_max_size: int,
-    image_max_num: int
+    image_max_num: int,
+    sample_method: str = "evenly"
 ) -> List[Dict[str, Any]]:
     """
     请求输入要求：图片大小总和不可以大于total_max_size，图片数量最多image_max_num
@@ -163,10 +164,25 @@ def prepare_image_messages(
     paths = [p.strip() for p in image_rel_paths.split(',') if p.strip()]
     messages = []
     
+    # 如果图片数量超过最大数量，则进行采样
     if len(paths) > image_max_num:
         original_num = len(paths)
-        paths = paths[:image_max_num]
-        print(f"Warning: Image number {original_num} exceeds max_num ({image_max_num}), only use the first {image_max_num} images")
+        if sample_method == "first":
+            paths = paths[:image_max_num]
+            print(f"Warning: Image number {original_num} exceeds max_num ({image_max_num}), only use the first {image_max_num} images")
+        elif sample_method == "evenly":
+            if image_max_num <= 1:
+                paths = [paths[0]]
+            else:
+                step = (len(paths) - 1) / (image_max_num - 1)
+                indices = [round(i * step) for i in range(image_max_num)]
+                paths = [paths[i] for i in indices]
+                print(
+                    f"Warning: Image number {original_num} exceeds max_num ({image_max_num}), "
+                    f"evenly sample to {len(paths)} images"
+                )
+        else:
+            raise ValueError(f"Invalid sample method: {sample_method}")
     
     # 计算每张图片的最大字节数, base64编码后的字节数通常是原始的1.33倍，要换算成原始字节数
     max_size_per_image = (total_max_size / 1.33 / 1.33) // len(paths)
@@ -285,7 +301,7 @@ def evaluate_dataset():
     # # 随机打乱数据集，并取前20条数据，用于调试
     # random.seed(42)
     # random.shuffle(dataset)
-    # dataset = dataset[:10]
+    # dataset = dataset[:5]
     print(f"Loaded {len(dataset)} items from {TARGET_FILE}")
     
     # save results to file
