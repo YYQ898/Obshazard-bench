@@ -312,7 +312,7 @@ def evaluate_dataset():
             with open(OUTPUT_FILE, 'r', encoding='utf-8') as f:
                 results = json.load(f)['details']
                 # remove results with API Error or empty prediction
-                remain_results_ids = [r['id'] for r in results if r['prediction'] and r['prediction'] != 'API Error']
+                remain_results_ids = [r['id'] for r in results if str(r['prediction']).strip() and str(r['prediction']).strip() != 'API Error']
                 results = [r for r in results if r['id'] in remain_results_ids]
                 print(f"Loaded {len(results)} results from {resume_file}")
                 for item in copy.deepcopy(dataset):
