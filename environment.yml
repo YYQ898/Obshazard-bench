@@ -1,0 +1,10 @@
+name: extreme-events
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - openai==2.21.0
+    - Pillow==12.1.1

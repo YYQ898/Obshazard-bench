@@ -436,22 +436,109 @@ def evaluate_dataset():
 
     total_score = sum(r["score"] for r in results)
     avg_score = total_score / len(results) if results else 0
-    
-    task_stats = {}
+
+    # 三级分组统计: Task -> Subtask -> tx
+    import re
+    task_stats = {}       # task -> [scores]
+    subtask_stats = {}    # task -> subtask_name -> [scores]
+    tx_stats = {}         # task -> subtask_name -> tx -> [scores]
+
     for r in results:
-        t = r.get("task", "Unknown")
-        if t not in task_stats: task_stats[t] = []
-        task_stats[t].append(r["score"])
-        
-    print("\n" + "="*40)
-    print(f"Evaluation Complete. Overall Score: {avg_score:.4f}")
-    print("Scores by Task:")
-    for t, scores in task_stats.items():
-        print(f"  - {t}: {sum(scores)/len(scores):.4f} (n={len(scores)})")
-    print("="*40)
-    
+        task = r.get("task", "Unknown")
+        subtask_raw = r.get("subtask", "")
+
+        # Task级
+        if task not in task_stats:
+            task_stats[task] = []
+        task_stats[task].append(r["score"])
+
+        # 解析Subtask: "Risk Detection (t1)" -> name="Risk Detection", tx="t1"
+        m = re.match(r'(.+?)\s*\((t\d+)\)', subtask_raw)
+        if m:
+            subtask_name = m.group(1).strip()
+            tx = m.group(2)
+        else:
+            subtask_name = subtask_raw.strip()
+            tx = "overall"
+
+        # Subtask级
+        if task not in subtask_stats:
+            subtask_stats[task] = {}
+        if subtask_name not in subtask_stats[task]:
+            subtask_stats[task][subtask_name] = []
+        subtask_stats[task][subtask_name].append(r["score"])
+
+        # tx级
+        if task not in tx_stats:
+            tx_stats[task] = {}
+        if subtask_name not in tx_stats[task]:
+            tx_stats[task][subtask_name] = {}
+        if tx not in tx_stats[task][subtask_name]:
+            tx_stats[task][subtask_name][tx] = []
+        tx_stats[task][subtask_name][tx].append(r["score"])
+
+    # 打印多层级统计
+    print("\n" + "="*60)
+    print(f"Evaluation Complete. Overall Score: {avg_score:.4f} (n={len(results)})")
+    print("="*60)
+
+    for task in sorted(task_stats.keys()):
+        scores = task_stats[task]
+        task_avg = sum(scores) / len(scores) if scores else 0
+        print(f"\n=== {task} ===")
+        print(f"  Overall: {task_avg:.4f} (n={len(scores)})")
+
+        if task in subtask_stats:
+            for subtask_name in sorted(subtask_stats[task].keys()):
+                st_scores = subtask_stats[task][subtask_name]
+                st_avg = sum(st_scores) / len(st_scores) if st_scores else 0
+                print(f"  {subtask_name}: {st_avg:.4f} (n={len(st_scores)})")
+
+                if task in tx_stats and subtask_name in tx_stats[task]:
+                    # 按t编号数字排序
+                    sorted_tx = sorted(tx_stats[task][subtask_name].keys(),
+                                       key=lambda x: int(x[1:]) if x.startswith('t') and x[1:].isdigit() else 999)
+                    for tx in sorted_tx:
+                        tx_scores = tx_stats[task][subtask_name][tx]
+                        tx_avg = sum(tx_scores) / len(tx_scores) if tx_scores else 0
+                        print(f"    {tx}: {tx_avg:.4f} (n={len(tx_scores)})")
+
+    print("\n" + "="*60)
+
+    # 构建嵌套的JSON summary
+    summary_by_task = {}
+    for task in sorted(task_stats.keys()):
+        scores = task_stats[task]
+        task_entry = {
+            "overall": sum(scores) / len(scores) if scores else 0,
+            "n": len(scores),
+            "by_subtask": {}
+        }
+        if task in subtask_stats:
+            for subtask_name in sorted(subtask_stats[task].keys()):
+                st_scores = subtask_stats[task][subtask_name]
+                subtask_entry = {
+                    "overall": sum(st_scores) / len(st_scores) if st_scores else 0,
+                    "n": len(st_scores),
+                    "by_timestep": {}
+                }
+                if task in tx_stats and subtask_name in tx_stats[task]:
+                    sorted_tx = sorted(tx_stats[task][subtask_name].keys(),
+                                       key=lambda x: int(x[1:]) if x.startswith('t') and x[1:].isdigit() else 999)
+                    for tx in sorted_tx:
+                        tx_scores = tx_stats[task][subtask_name][tx]
+                        subtask_entry["by_timestep"][tx] = {
+                            "score": sum(tx_scores) / len(tx_scores) if tx_scores else 0,
+                            "n": len(tx_scores)
+                        }
+                task_entry["by_subtask"][subtask_name] = subtask_entry
+        summary_by_task[task] = task_entry
+
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
-        json.dump({"summary": {"overall": avg_score, "by_task": {k: sum(v)/len(v) for k,v in task_stats.items()}}, "details": results}, f, indent=2, ensure_ascii=False)
+        json.dump({
+            "summary": {"overall": avg_score, "n": len(results), "by_task": summary_by_task},
+            "details": results
+        }, f, indent=2, ensure_ascii=False)
     print(f"Results saved to {OUTPUT_FILE}")
 
 

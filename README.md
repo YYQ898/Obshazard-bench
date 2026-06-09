@@ -1,82 +1,128 @@
-# Extreme Events — 极端天气事件多模态评测框架
+# ObsCrisis-Bench — Extreme Weather Event Multimodal Evaluation Framework
 
-本项目是一个针对大型视觉语言模型（LVM）的评测框架，用于评估模型在**极端天气事件**（地震、风暴等）分析任务上的表现。评测输入包括卫星多光谱图像与气象站传感器数据，输出涵盖灾害风险预判、强度预测、类别识别等多类任务的得分。
-
----
-
-## 功能特性
-
-- 支持多模态输入：卫星多波段图像 + 气象站传感器时序数据
-- 支持多种大模型评测：GPT-4o、Gemini 3 Pro、Qwen 3.5 等
-- 自动图像压缩，适配不同模型的上下文大小限制
-- 多线程并发请求，评测效率高
-- 支持断点续评（`--resume`）
-- 按任务类型分类统计得分
+ObsCrisis-Bench is a benchmark for evaluating large vision-language models on **extreme weather event** analysis tasks. The evaluation input includes satellite multispectral imagery and weather station sensor data, covering disaster risk assessment, intensity prediction, type classification, and more.
 
 ---
 
-## 环境要求
+## Features
 
-- Python 3.8+
-- 可访问的 OpenAI 兼容 API 端点
+- Multimodal input: satellite multi-band imagery + weather station time-series data
+- Support for multiple LVMs: GPT-4o, Gemini 3 Pro, Qwen 3.5, etc.
+- Automatic image compression to fit different model context size limits
+- Multi-threaded concurrent requests for efficient evaluation
+- Resume from interrupted evaluation (`--resume`)
+- Hierarchical scoring: **Task → Subtask → Timestep (tx)** level statistics
+
+---
+
+## Dataset
+
+The benchmark dataset is available on HuggingFace: [ObsCrisis-Bench](https://huggingface.co/datasets/YYQ898/ObsCrisis-Bench)
+
+### Dataset Structure
+
+```
+ObsCrisis-Bench/
+├── cold-wave/                          # Satellite imagery
+│   └── cold-wave1/
+│       └── <event_id>/
+│           ├── AMSU-A/<band>/t1.png ... tN.png
+│           ├── HIRS/<band>/t1.png ... tN.png
+│           └── MHS/<band>/t1.png ... tN.png
+├── cold-wave_json/
+│   └── All.json                        # VQA records
+├── heat-wave/
+├── heat-wave_json/
+│   └── All.json
+├── earthquake/
+├── earthquake_json/
+│   └── All.json
+├── flood/
+├── flood_json/
+│   └── All.json
+├── mass movement (wet)/
+├── mass movement (wet)_json/
+│   └── All.json
+├── storm/
+├── storm_json/
+│   └── All.json
+├── volcanic activity/
+├── volcanic activity_json/
+│   └── All.json
+├── wildfire/
+└── wildfire_json/
+    └── All.json
+```
+
+### Disaster Categories
+
+| Category | Events | VQA Samples | Subtypes |
+|----------|--------|-------------|----------|
+| cold-wave | 5 | 140 | cold-wave1 |
+| heat-wave | 5 | 165 | heat-wave1 |
+| earthquake | 10 | 361 | ground movement, tsunami |
+| flood | 17 | 522 | coastal flood, flash flood, general flood, riverine flood |
+| mass movement (wet) | 6 | 165 | landslide wet, mudslide |
+| storm | 55 | 1784 | 11 subtypes (hail, tornado, etc.) |
+| volcanic activity | 15 | 409 | ash fall, general activity, lava flow, pyroclastic flow |
+| wildfire | 14 | 441 | forest fire, general wildfire, land fire |
+| **Total** | **127** | **3987** | |
+
+### VQA Sample Fields
+
+| Field | Description |
+|-------|-------------|
+| `Question_id` | Unique identifier |
+| `Task` | Task category (Early Warning, Real-time Assessment, Retrospective Analysis) |
+| `Subtask` | Subtask with timestep, e.g. "Risk Detection (t1)" |
+| `Text` | Question text |
+| `Image` | Comma-separated relative image paths |
+| `Stations` | Weather station sensor data (JSON, optional) |
+| `Ground truth` | Standard answer |
+
+### Timestep Convention
+
+- `t1` = 14 days before event start
+- `t15` = event start day
+- `t_number = (image_date - event_start_date).days + 15`
+
+---
+
+## Setup
 
 ```bash
 pip install -r requirements.txt
 ```
 
-依赖项：
+Dependencies:
 - `openai==2.21.0`
 - `Pillow==12.1.1`
 
 ---
 
-## 数据集结构
+## Quick Start
 
-数据集根目录下应包含以下文件：
-
-```
-<dataset_root>/
-├── Image_Only.json           # 仅含图像的评测集
-├── Image_With_Station.json   # 图像 + 气象站数据的评测集
-└── dataset_metadata.json     # （可选）卫星传感器及站点字段定义
-```
-
-每条数据样本的字段：
-
-| 字段 | 说明 |
-|------|------|
-| `Question_id` | 唯一标识符 |
-| `Task` | 任务大类（如 earthquake、storm） |
-| `Subtask` | 子任务类型 |
-| `Text` | 问题文本 |
-| `Image` | 逗号分隔的图像相对路径列表 |
-| `Stations` | 气象站传感器数据（JSON 对象，可选） |
-| `Ground truth` | 标准答案 |
-
----
-
-## 快速开始
-
-**配置 API 凭据：**
+**Configure API credentials:**
 
 ```bash
-export OPENAI_BASE_URL=<your_api_base_url>
-export OPENAI_API_KEY=<your_api_key>
+export OPENAI_BASE_URL=https://api.openai.com/v1
+export OPENAI_API_KEY=your-api-key-here
 ```
 
-**运行评测（使用 run.sh 中预配置的参数）：**
+**Run evaluation using run.sh:**
 
 ```bash
+# Edit DATA_ROOT in run.sh to point to your dataset path
 bash run.sh
 ```
 
-**直接运行 evaluate.py：**
+**Run evaluate.py directly:**
 
 ```bash
 python evaluate.py \
-  --dataset-root /path/to/dataset \
-  --raw-data-base-path /path/to/images \
-  --target-file Image_With_Station.json \
+  --dataset-root /path/to/ObsCrisis-Bench/storm_json \
+  --raw-data-base-path /path/to/ObsCrisis-Bench \
+  --target-file All.json \
   --model-name gpt-4o \
   --max-workers 64 \
   --image-max-num 500 \
@@ -85,70 +131,84 @@ python evaluate.py \
   --max-tokens 300
 ```
 
-**恢复上次中断的评测：**
+**Resume interrupted evaluation:**
 
 ```bash
-python evaluate.py <其他参数> \
+python evaluate.py <other args> \
   --resume \
   --resume-file output/eval_result_<timestamp>.json
 ```
 
 ---
 
-## 参数说明
+## Arguments
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--dataset-root` | 必填 | 数据集 JSON 文件所在目录 |
-| `--raw-data-base-path` | 必填 | 卫星图像文件的根目录 |
-| `--target-file` | `Image_Only.json` | 评测集文件名 |
-| `--model-name` | `gpt-4o` | 模型名称 |
-| `--max-workers` | `64` | 并发线程数 |
-| `--image-max-num` | `500` | 单次请求最多图像数 |
-| `--total-max-size` | `47185920`（45 MB） | 单次请求图像总大小上限（字节） |
-| `--temperature` | `0.1` | 模型温度参数 |
-| `--max-tokens` | `300` | 最大输出 token 数 |
-| `--resume` | — | 开启断点续评模式 |
-| `--resume-file` | — | 续评时读取的历史结果文件 |
-
----
-
-## 支持的模型
-
-在 `run.sh` 中预定义了以下模型的推荐参数：
-
-| 模型 | 最大图像数 | 温度 | 备注 |
-|------|-----------|------|------|
-| `gpt-4o` | 500 | 0.1 | OpenAI 官方 API |
-| `gemini-3-pro-preview-thinking` | 600 | 1.0 | 通过 OpenAI 兼容适配器，支持 `reasoning_content` |
-| `qwen3.5-397b-a17b` | 250 | 0.6 | 阿里云 API，关闭 thinking 模式 |
-
-所有模型均通过 OpenAI 兼容 API 访问，可根据需要扩展其他模型。
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--dataset-root` | required | Directory containing the JSON evaluation file |
+| `--raw-data-base-path` | required | Root directory of satellite imagery |
+| `--target-file` | `All.json` | Evaluation JSON filename |
+| `--model-name` | `gpt-4o` | Model name |
+| `--max-workers` | `64` | Concurrent thread count |
+| `--image-max-num` | `500` | Max images per request |
+| `--total-max-size` | `47185920` (45 MB) | Max total image size per request (bytes) |
+| `--temperature` | `0.1` | Model temperature |
+| `--max-tokens` | `300` | Max output tokens |
+| `--resume` | — | Enable resume mode |
+| `--resume-file` | — | Previous result file to resume from |
 
 ---
 
-## 输出格式
+## Supported Models
 
-结果保存至 `output/eval_result_<dataset>_<model>_<file>_<timestamp>.json`：
+Pre-configured in `run.sh` with recommended parameters:
+
+| Model | Max Images | Temperature | Notes |
+|-------|-----------|-------------|-------|
+| `gpt-4o` | 500 | 0.1 | OpenAI API |
+| `gemini-3-pro-preview-thinking` | 600 | 1.0 | Supports `reasoning_content` |
+| `qwen3.5-397b-a17b` | 250 | 0.6 | Alibaba Cloud API |
+
+All models are accessed via OpenAI-compatible API. Extend as needed.
+
+---
+
+## Output Format
+
+Results are saved to `output/eval_result_<dataset>_<model>_<file>_<timestamp>.json`:
 
 ```json
 {
   "summary": {
-    "overall": 0.85,
+    "overall": 0.72,
+    "n": 3987,
     "by_task": {
-      "earthquake": 0.90,
-      "storm": 0.80
+      "Early Warning": {
+        "overall": 0.72,
+        "n": 165,
+        "by_subtask": {
+          "Risk Detection": {
+            "overall": 0.85,
+            "n": 45,
+            "by_timestep": {
+              "t1": {"score": 0.90, "n": 15},
+              "t8": {"score": 0.83, "n": 15},
+              "t12": {"score": 0.82, "n": 15}
+            }
+          }
+        }
+      }
     }
   },
   "details": [
     {
       "id": "Q001",
-      "task": "storm",
-      "subtask": "intensity",
-      "ground_truth": "Category 3",
-      "prediction": "Category 3",
+      "task": "Early Warning",
+      "subtask": "Risk Detection (t1)",
+      "ground_truth": "Yes",
+      "prediction": "Yes",
       "score": 1.0,
-      "score_type": "classification_exact",
+      "score_type": "boolean",
       "raw_response": "...",
       "raw_reasoning_content": "..."
     }
@@ -156,23 +216,29 @@ python evaluate.py <其他参数> \
 }
 ```
 
-### 评分规则
+### Scoring Rules
 
-| 类型 | 判断条件 | 规则 |
-|------|---------|------|
-| 布尔型 | 答案为 yes/no | 精确匹配，1.0 或 0.0 |
-| 数值型 | 答案可解析为数字 | 误差 ≤10% 得 1.0，>20% 得 0.0，中间线性衰减 |
-| 分类型 | 纯字母字符串且长度 < 30 | 精确匹配 1.0，包含匹配 0.8 |
-| 文本型 | 其他情况 | 基于词集合的 Jaccard 重叠分 |
+| Type | Condition | Rule |
+|------|-----------|------|
+| Boolean | Answer is yes/no | Exact match: 1.0 or 0.0 |
+| Numeric | Answer parses to a number | Error ≤10% → 1.0, >20% → 0.0, linear decay between |
+| Classification | Alphabetic string, length < 30 | Exact match → 1.0, contains match → 0.8 |
+| Text | Other | Jaccard overlap on word sets |
 
 ---
 
-## 工具脚本
+## Utility Scripts
 
 ```bash
-# 校验输出结果文件的完整性
+# Check output result file integrity
 python scripts/check.py
 
-# 分析数据集统计信息（任务分布、图像数量等）
+# Analyze dataset statistics (task distribution, image counts, etc.)
 python scripts/data_analyse.py
 ```
+
+---
+
+## License
+
+This project is licensed under the MIT License.
