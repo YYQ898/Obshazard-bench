@@ -27,3 +27,7 @@ _*
 *.log
 *.swp
 *.swo
+
+# 上传相关文件（不上传到 GitHub）
+UPLOAD_GUIDE.md
+scripts/upload_to_huggingface.py

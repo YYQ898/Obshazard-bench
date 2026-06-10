@@ -19,6 +19,28 @@ ObsCrisis-Bench is a benchmark for evaluating large vision-language models on **
 
 The benchmark dataset is available on HuggingFace: [ObsCrisis-Bench](https://huggingface.co/datasets/YYQ898/ObsCrisis-Bench)
 
+### Dataset Statistics
+
+| Category | Events | VQA Samples |
+|----------|--------|-------------|
+| cold-wave | 5 | 154 |
+| earthquake | 10 | 426 |
+| flood | 17 | 580 |
+| heat-wave | 5 | 184 |
+| mass movement (wet) | 6 | 198 |
+| storm | 55 | 2,066 |
+| volcanic activity | 15 | 478 |
+| wildfire | 14 | 513 |
+| **Total** | **127** | **4,599** |
+
+### Task Distribution
+
+| Task Category | Samples | Percentage |
+|---------------|---------|------------|
+| Early Warning | 1,524 | 33.14% |
+| Impact Assessment | 2,862 | 62.23% |
+| Recovery Assessment | 213 | 4.63% |
+
 ### Dataset Structure
 
 ```
@@ -54,26 +76,12 @@ ObsCrisis-Bench/
     └── All.json
 ```
 
-### Disaster Categories
-
-| Category | Events | VQA Samples | Subtypes |
-|----------|--------|-------------|----------|
-| cold-wave | 5 | 140 | cold-wave1 |
-| heat-wave | 5 | 165 | heat-wave1 |
-| earthquake | 10 | 361 | ground movement, tsunami |
-| flood | 17 | 522 | coastal flood, flash flood, general flood, riverine flood |
-| mass movement (wet) | 6 | 165 | landslide wet, mudslide |
-| storm | 55 | 1784 | 11 subtypes (hail, tornado, etc.) |
-| volcanic activity | 15 | 409 | ash fall, general activity, lava flow, pyroclastic flow |
-| wildfire | 14 | 441 | forest fire, general wildfire, land fire |
-| **Total** | **127** | **3987** | |
-
 ### VQA Sample Fields
 
 | Field | Description |
 |-------|-------------|
 | `Question_id` | Unique identifier |
-| `Task` | Task category (Early Warning, Real-time Assessment, Retrospective Analysis) |
+| `Task` | Task category (Early Warning, Impact Assessment, Recovery Assessment) |
 | `Subtask` | Subtask with timestep, e.g. "Risk Detection (t1)" |
 | `Text` | Question text |
 | `Image` | Comma-separated relative image paths |
@@ -83,12 +91,17 @@ ObsCrisis-Bench/
 ### Timestep Convention
 
 - `t1` = 14 days before event start
+- `t8` = 7 days before event start
+- `t12` = 3 days before event start
 - `t15` = event start day
+- `tmax` = maximum impact time
 - `t_number = (image_date - event_start_date).days + 15`
 
 ---
 
 ## Setup
+
+### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -98,30 +111,49 @@ Dependencies:
 - `openai==2.21.0`
 - `Pillow==12.1.1`
 
+### Download Dataset
+
+```bash
+# Using huggingface-cli
+pip install huggingface-hub
+huggingface-cli download YYQ898/ObsCrisis-Bench --repo-type dataset --local-dir ./test
+
+# Or using Python
+python scripts/upload_to_huggingface.py  # See script for details
+```
+
 ---
 
 ## Quick Start
 
-**Configure API credentials:**
+### 1. Configure API Credentials
 
+**Option A: Environment Variables (Recommended)**
 ```bash
 export OPENAI_BASE_URL=https://api.openai.com/v1
 export OPENAI_API_KEY=your-api-key-here
 ```
 
-**Run evaluation using run.sh:**
-
+**Option B: Edit run.sh**
 ```bash
-# Edit DATA_ROOT in run.sh to point to your dataset path
+# Edit run.sh and uncomment/set these lines:
+export OPENAI_BASE_URL="YOUR_API_BASE_URL"
+export OPENAI_API_KEY="YOUR_API_KEY"
+```
+
+### 2. Run Evaluation
+
+**Using run.sh (Recommended)**
+```bash
+# Edit DATA_ROOT in run.sh to point to your dataset
 bash run.sh
 ```
 
-**Run evaluate.py directly:**
-
+**Using evaluate.py directly**
 ```bash
 python evaluate.py \
-  --dataset-root /path/to/ObsCrisis-Bench/storm_json \
-  --raw-data-base-path /path/to/ObsCrisis-Bench \
+  --dataset-root ./test/storm_json \
+  --raw-data-base-path ./test \
   --target-file All.json \
   --model-name gpt-4o \
   --max-workers 64 \
@@ -131,7 +163,7 @@ python evaluate.py \
   --max-tokens 300
 ```
 
-**Resume interrupted evaluation:**
+### 3. Resume Interrupted Evaluation
 
 ```bash
 python evaluate.py <other args> \
@@ -181,19 +213,19 @@ Results are saved to `output/eval_result_<dataset>_<model>_<file>_<timestamp>.js
 {
   "summary": {
     "overall": 0.72,
-    "n": 3987,
+    "n": 4599,
     "by_task": {
       "Early Warning": {
         "overall": 0.72,
-        "n": 165,
+        "n": 1524,
         "by_subtask": {
           "Risk Detection": {
             "overall": 0.85,
-            "n": 45,
+            "n": 381,
             "by_timestep": {
-              "t1": {"score": 0.90, "n": 15},
-              "t8": {"score": 0.83, "n": 15},
-              "t12": {"score": 0.82, "n": 15}
+              "t1": {"score": 0.90, "n": 127},
+              "t8": {"score": 0.83, "n": 127},
+              "t12": {"score": 0.82, "n": 127}
             }
           }
         }
@@ -202,43 +234,97 @@ Results are saved to `output/eval_result_<dataset>_<model>_<file>_<timestamp>.js
   },
   "details": [
     {
-      "id": "Q001",
-      "task": "Early Warning",
-      "subtask": "Risk Detection (t1)",
+      "id": "Early/Detection/t1/storm/2015-0069-TZA",
+      "question": "...",
       "ground_truth": "Yes",
       "prediction": "Yes",
       "score": 1.0,
-      "score_type": "boolean",
-      "raw_response": "...",
-      "raw_reasoning_content": "..."
+      "raw_response": "..."
     }
   ]
 }
 ```
 
-### Scoring Rules
-
-| Type | Condition | Rule |
-|------|-----------|------|
-| Boolean | Answer is yes/no | Exact match: 1.0 or 0.0 |
-| Numeric | Answer parses to a number | Error ≤10% → 1.0, >20% → 0.0, linear decay between |
-| Classification | Alphabetic string, length < 30 | Exact match → 1.0, contains match → 0.8 |
-| Text | Other | Jaccard overlap on word sets |
-
 ---
 
 ## Utility Scripts
 
-```bash
-# Check output result file integrity
-python scripts/check.py
+### Dataset Statistics
 
-# Analyze dataset statistics (task distribution, image counts, etc.)
-python scripts/data_analyse.py
+```bash
+python scripts/dataset_statistics.py
+```
+
+### Data Analysis
+
+```bash
+python scripts/data_analyse.py \
+  --dataset-path ./test/storm_json/All.json \
+  --image-base-path ./test/storm
+```
+
+### Upload to HuggingFace
+
+```bash
+python scripts/upload_to_huggingface.py --token YOUR_HF_TOKEN
+```
+
+---
+
+## Project Structure
+
+```
+Extreme-events/
+├── evaluate.py              # Main evaluation script
+├── run.sh                   # Batch evaluation script
+├── requirements.txt         # Python dependencies
+├── environment.yml          # Conda environment
+├── README.md                # This file
+├── UPLOAD_GUIDE.md          # Upload instructions
+├── .gitignore              # Git ignore rules
+├── scripts/
+│   ├── check.py            # Result checking utility
+│   ├── data_analyse.py     # Data analysis script
+│   ├── dataset_statistics.py  # Dataset statistics
+│   ├── upload_to_huggingface.py  # HuggingFace upload script
+│   └── rlaunch_cpu.sh      # Cluster launch script (template)
+└── test/                   # Dataset directory (not in Git)
+    ├── README.md           # Dataset README
+    ├── cold-wave_json/
+    ├── earthquake_json/
+    ├── flood_json/
+    ├── heat-wave_json/
+    ├── mass movement (wet)_json/
+    ├── storm/
+    ├── storm_json/
+    ├── volcanic activity_json/
+    └── wildfire_json/
+```
+
+---
+
+## Citation
+
+If you use this code or dataset, please cite:
+
+```bibtex
+@misc{obscrisis-bench,
+  title={ObsCrisis-Bench: A Multimodal Benchmark for Extreme Weather Event Analysis},
+  author={YYQ898},
+  year={2024},
+  publisher={HuggingFace},
+  url={https://huggingface.co/datasets/YYQ898/ObsCrisis-Bench}
+}
 ```
 
 ---
 
 ## License
 
-This project is licensed under the MIT License.
+This project is released under the MIT License.
+
+---
+
+## Contact
+
+For questions or issues, please open an issue on [GitHub](https://github.com/YYQ898/ObsCrisis-Bench).
