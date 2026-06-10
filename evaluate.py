@@ -538,24 +538,56 @@ Please analyze and answer questions based on the provided satellite image data.
     total_score = sum(r["score"] for r in results)
     avg_score = total_score / len(results) if results else 0
 
-    # 三级分组统计: Task -> Subtask -> tx
+    # 四级分组统计: DisasterType -> DisasterSubtype -> Task -> Subtask -> tx
     import re
+    
+    # 灾害小类到大类的映射
+    SUBTYPE_TO_TYPE = {
+        "ground movement": "earthquake", "tsunami": "earthquake",
+        "cold-wave1": "cold-wave", "heat-wave1": "heat-wave",
+        "coastal flood": "flood", "flash flood": "flood", "general flood": "flood", "riverine flood": "flood",
+        "landslide wet": "mass movement (wet)", "mudslide": "mass movement (wet)",
+        "hail": "storm", "tornado": "storm", "tropical cyclone": "storm", "extra-tropical cyclone": "storm",
+        "convective storm": "storm", "general storm": "storm", "storm surge": "storm", "lightning": "storm",
+        "sandstorm": "storm", "severe weather": "storm", "wind": "storm",
+        "ash fall": "volcanic activity", "general activity": "volcanic activity", "lava flow": "volcanic activity",
+        "pyroclastic flow": "volcanic activity", "lahar": "volcanic activity",
+        "forest fire": "wildfire", "general wildfire": "wildfire", "land fire": "wildfire",
+    }
+    
+    def extract_disaster_info(question_id):
+        """从 Question_id 提取灾害大类和小类"""
+        parts = question_id.split('/')
+        if len(parts) >= 4:
+            disaster_subtype = parts[3]
+            disaster_type = SUBTYPE_TO_TYPE.get(disaster_subtype, "unknown")
+            return disaster_type, disaster_subtype
+        return None, None
+    
+    # 统计字典
+    # 灾害大类统计
+    disaster_type_stats = {}  # disaster_type -> [scores]
+    
+    # 灾害小类统计（新增完整层级）
+    disaster_subtype_stats = {}  # disaster_type -> disaster_subtype -> [scores]
+    disaster_subtype_task_stats = {}  # disaster_type -> disaster_subtype -> task -> [scores]
+    disaster_subtype_subtask_stats = {}  # disaster_type -> disaster_subtype -> task -> subtask -> [scores]
+    disaster_subtype_tx_stats = {}  # disaster_type -> disaster_subtype -> task -> subtask -> tx -> [scores]
+    
+    # 任务统计
     task_stats = {}       # task -> [scores]
     subtask_stats = {}    # task -> subtask_name -> [scores]
     tx_stats = {}         # task -> subtask_name -> tx -> [scores]
 
     for r in results:
+        # 提取灾害信息
+        question_id = r.get("id", "")
+        disaster_type, disaster_subtype = extract_disaster_info(question_id)
+        
         task = r.get("task", "Unknown")
         subtask_raw = r.get("subtask", "")
-
-        # Task级
-        if task not in task_stats:
-            task_stats[task] = []
-        task_stats[task].append(r["score"])
-
+        
         # 解析Subtask: "Risk Detection (t1)" -> name="Risk Detection", tx="t1"
-        # "Total Deaths (tmax)" -> name="Total Deaths", tx="tmax"
-        # "Total Deaths (tmax-1)" -> name="Total Deaths", tx="tmax-1"
         m = re.match(r'(.+?)\s*\((tmax-1|tmax|t\d+)\)', subtask_raw)
         if m:
             subtask_name = m.group(1).strip()
@@ -563,6 +595,57 @@ Please analyze and answer questions based on the provided satellite image data.
         else:
             subtask_name = subtask_raw.strip()
             tx = "overall"
+        
+        # 灾害大类统计
+        if disaster_type:
+            if disaster_type not in disaster_type_stats:
+                disaster_type_stats[disaster_type] = []
+            disaster_type_stats[disaster_type].append(r["score"])
+            
+            # 灾害小类统计（新增完整层级）
+            if disaster_type not in disaster_subtype_stats:
+                disaster_subtype_stats[disaster_type] = {}
+            if disaster_subtype not in disaster_subtype_stats[disaster_type]:
+                disaster_subtype_stats[disaster_type][disaster_subtype] = []
+            disaster_subtype_stats[disaster_type][disaster_subtype].append(r["score"])
+            
+            # 灾害小类 -> 任务
+            if disaster_type not in disaster_subtype_task_stats:
+                disaster_subtype_task_stats[disaster_type] = {}
+            if disaster_subtype not in disaster_subtype_task_stats[disaster_type]:
+                disaster_subtype_task_stats[disaster_type][disaster_subtype] = {}
+            if task not in disaster_subtype_task_stats[disaster_type][disaster_subtype]:
+                disaster_subtype_task_stats[disaster_type][disaster_subtype][task] = []
+            disaster_subtype_task_stats[disaster_type][disaster_subtype][task].append(r["score"])
+            
+            # 灾害小类 -> 任务 -> 子任务
+            if disaster_type not in disaster_subtype_subtask_stats:
+                disaster_subtype_subtask_stats[disaster_type] = {}
+            if disaster_subtype not in disaster_subtype_subtask_stats[disaster_type]:
+                disaster_subtype_subtask_stats[disaster_type][disaster_subtype] = {}
+            if task not in disaster_subtype_subtask_stats[disaster_type][disaster_subtype]:
+                disaster_subtype_subtask_stats[disaster_type][disaster_subtype][task] = {}
+            if subtask_name not in disaster_subtype_subtask_stats[disaster_type][disaster_subtype][task]:
+                disaster_subtype_subtask_stats[disaster_type][disaster_subtype][task][subtask_name] = []
+            disaster_subtype_subtask_stats[disaster_type][disaster_subtype][task][subtask_name].append(r["score"])
+            
+            # 灾害小类 -> 任务 -> 子任务 -> 时间步
+            if disaster_type not in disaster_subtype_tx_stats:
+                disaster_subtype_tx_stats[disaster_type] = {}
+            if disaster_subtype not in disaster_subtype_tx_stats[disaster_type]:
+                disaster_subtype_tx_stats[disaster_type][disaster_subtype] = {}
+            if task not in disaster_subtype_tx_stats[disaster_type][disaster_subtype]:
+                disaster_subtype_tx_stats[disaster_type][disaster_subtype][task] = {}
+            if subtask_name not in disaster_subtype_tx_stats[disaster_type][disaster_subtype][task]:
+                disaster_subtype_tx_stats[disaster_type][disaster_subtype][task][subtask_name] = {}
+            if tx not in disaster_subtype_tx_stats[disaster_type][disaster_subtype][task][subtask_name]:
+                disaster_subtype_tx_stats[disaster_type][disaster_subtype][task][subtask_name][tx] = []
+            disaster_subtype_tx_stats[disaster_type][disaster_subtype][task][subtask_name][tx].append(r["score"])
+
+        # Task级
+        if task not in task_stats:
+            task_stats[task] = []
+        task_stats[task].append(r["score"])
 
         # Subtask级
         if task not in subtask_stats:
@@ -581,15 +664,62 @@ Please analyze and answer questions based on the provided satellite image data.
         tx_stats[task][subtask_name][tx].append(r["score"])
 
     # 打印多层级统计
-    print("\n" + "="*60)
+    print("\n" + "="*70)
     print(f"Evaluation Complete. Overall Score: {avg_score:.4f} (n={len(results)})")
-    print("="*60)
+    print("="*70)
+    
+    # 打印灾害大类和小类统计（新增详细统计）
+    if disaster_type_stats:
+        print("\n=== By Disaster Type ===")
+        for dt in sorted(disaster_type_stats.keys()):
+            scores = disaster_type_stats[dt]
+            dt_avg = sum(scores) / len(scores) if scores else 0
+            print(f"\n{dt}: {dt_avg:.4f} (n={len(scores)})")
+            
+            # 打印灾害小类详细统计
+            if dt in disaster_subtype_stats:
+                for dst in sorted(disaster_subtype_stats[dt].keys()):
+                    dst_scores = disaster_subtype_stats[dt][dst]
+                    dst_avg = sum(dst_scores) / len(dst_scores) if dst_scores else 0
+                    print(f"\n  === {dst} (n={len(dst_scores)}) ===")
+                    print(f"  Overall: {dst_avg:.4f}")
+                    
+                    # 打印灾害小类的任务统计
+                    if dt in disaster_subtype_task_stats and dst in disaster_subtype_task_stats[dt]:
+                        for task in sorted(disaster_subtype_task_stats[dt][dst].keys()):
+                            task_scores = disaster_subtype_task_stats[dt][dst][task]
+                            task_avg = sum(task_scores) / len(task_scores) if task_scores else 0
+                            print(f"\n  {task}: {task_avg:.4f} (n={len(task_scores)})")
+                            
+                            # 打印子任务
+                            if dt in disaster_subtype_subtask_stats and dst in disaster_subtype_subtask_stats[dt]:
+                                if task in disaster_subtype_subtask_stats[dt][dst]:
+                                    for subtask_name in sorted(disaster_subtype_subtask_stats[dt][dst][task].keys()):
+                                        st_scores = disaster_subtype_subtask_stats[dt][dst][task][subtask_name]
+                                        st_avg = sum(st_scores) / len(st_scores) if st_scores else 0
+                                        print(f"    {subtask_name}: {st_avg:.4f} (n={len(st_scores)})")
+                                        
+                                        # 打印时间步
+                                        if dt in disaster_subtype_tx_stats and dst in disaster_subtype_tx_stats[dt]:
+                                            if task in disaster_subtype_tx_stats[dt][dst] and subtask_name in disaster_subtype_tx_stats[dt][dst][task]:
+                                                # 排序: t1, t8, t12, ..., tmax-1, tmax
+                                                def tx_sort_key(x):
+                                                    if x == 'tmax-1': return 998
+                                                    if x == 'tmax': return 999
+                                                    if x.startswith('t') and x[1:].isdigit(): return int(x[1:])
+                                                    return 500
+                                                sorted_tx = sorted(disaster_subtype_tx_stats[dt][dst][task][subtask_name].keys(), key=tx_sort_key)
+                                                for tx in sorted_tx:
+                                                    tx_scores = disaster_subtype_tx_stats[dt][dst][task][subtask_name][tx]
+                                                    tx_avg = sum(tx_scores) / len(tx_scores) if tx_scores else 0
+                                                    print(f"      {tx}: {tx_avg:.4f} (n={len(tx_scores)})")
 
+    # 打印任务统计
+    print("\n\n=== By Task ===")
     for task in sorted(task_stats.keys()):
         scores = task_stats[task]
         task_avg = sum(scores) / len(scores) if scores else 0
-        print(f"\n=== {task} ===")
-        print(f"  Overall: {task_avg:.4f} (n={len(scores)})")
+        print(f"\n{task}: {task_avg:.4f} (n={len(scores)})")
 
         if task in subtask_stats:
             for subtask_name in sorted(subtask_stats[task].keys()):
@@ -610,9 +740,70 @@ Please analyze and answer questions based on the provided satellite image data.
                         tx_avg = sum(tx_scores) / len(tx_scores) if tx_scores else 0
                         print(f"    {tx}: {tx_avg:.4f} (n={len(tx_scores)})")
 
-    print("\n" + "="*60)
+    print("\n" + "="*70)
 
     # 构建嵌套的JSON summary
+    
+    # 灾害大类和小类统计（新增完整层级）
+    summary_by_disaster_type = {}
+    for dt in sorted(disaster_type_stats.keys()):
+        scores = disaster_type_stats[dt]
+        dt_entry = {
+            "overall": sum(scores) / len(scores) if scores else 0,
+            "n": len(scores),
+            "by_subtype": {}
+        }
+        if dt in disaster_subtype_stats:
+            for dst in sorted(disaster_subtype_stats[dt].keys()):
+                dst_scores = disaster_subtype_stats[dt][dst]
+                dst_entry = {
+                    "overall": sum(dst_scores) / len(dst_scores) if dst_scores else 0,
+                    "n": len(dst_scores),
+                    "by_task": {}
+                }
+                
+                # 灾害小类的任务统计
+                if dt in disaster_subtype_task_stats and dst in disaster_subtype_task_stats[dt]:
+                    for task in sorted(disaster_subtype_task_stats[dt][dst].keys()):
+                        task_scores = disaster_subtype_task_stats[dt][dst][task]
+                        task_entry = {
+                            "overall": sum(task_scores) / len(task_scores) if task_scores else 0,
+                            "n": len(task_scores),
+                            "by_subtask": {}
+                        }
+                        
+                        # 灾害小类的子任务统计
+                        if dt in disaster_subtype_subtask_stats and dst in disaster_subtype_subtask_stats[dt]:
+                            if task in disaster_subtype_subtask_stats[dt][dst]:
+                                for subtask_name in sorted(disaster_subtype_subtask_stats[dt][dst][task].keys()):
+                                    st_scores = disaster_subtype_subtask_stats[dt][dst][task][subtask_name]
+                                    subtask_entry = {
+                                        "overall": sum(st_scores) / len(st_scores) if st_scores else 0,
+                                        "n": len(st_scores),
+                                        "by_timestep": {}
+                                    }
+                                    
+                                    # 灾害小类的时间步统计
+                                    if dt in disaster_subtype_tx_stats and dst in disaster_subtype_tx_stats[dt]:
+                                        if task in disaster_subtype_tx_stats[dt][dst] and subtask_name in disaster_subtype_tx_stats[dt][dst][task]:
+                                            def tx_sort_key(x):
+                                                if x == 'tmax-1': return 998
+                                                if x == 'tmax': return 999
+                                                if x.startswith('t') and x[1:].isdigit(): return int(x[1:])
+                                                return 500
+                                            sorted_tx = sorted(disaster_subtype_tx_stats[dt][dst][task][subtask_name].keys(), key=tx_sort_key)
+                                            for tx in sorted_tx:
+                                                tx_scores = disaster_subtype_tx_stats[dt][dst][task][subtask_name][tx]
+                                                subtask_entry["by_timestep"][tx] = {
+                                                    "score": sum(tx_scores) / len(tx_scores) if tx_scores else 0,
+                                                    "n": len(tx_scores)
+                                                }
+                                    task_entry["by_subtask"][subtask_name] = subtask_entry
+                        dst_entry["by_task"][task] = task_entry
+                dt_entry["by_subtype"][dst] = dst_entry
+        summary_by_disaster_type[dt] = dt_entry
+    
+    # 任务统计
     summary_by_task = {}
     for task in sorted(task_stats.keys()):
         scores = task_stats[task]
@@ -647,7 +838,12 @@ Please analyze and answer questions based on the provided satellite image data.
 
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
         json.dump({
-            "summary": {"overall": avg_score, "n": len(results), "by_task": summary_by_task},
+            "summary": {
+                "overall": avg_score, 
+                "n": len(results), 
+                "by_disaster_type": summary_by_disaster_type,
+                "by_task": summary_by_task
+            },
             "details": results
         }, f, indent=2, ensure_ascii=False)
     print(f"Results saved to {OUTPUT_FILE}")

@@ -38,16 +38,17 @@ def main():
     print("Starting upload...")
 
     try:
-        api.upload_folder(
+        # 使用 upload_large_folder 处理大文件夹
+        # 注意：upload_large_folder 不支持 commit_message 参数
+        api.upload_large_folder(
             folder_path=str(folder_path),
             repo_id=args.repo_id,
-            repo_type="dataset",
-            commit_message=args.commit_message
+            repo_type="dataset"
         )
-        print("\n✅ Upload completed successfully!")
+        print("\n[OK] Upload completed successfully!")
         print(f"View your dataset at: https://huggingface.co/datasets/{args.repo_id}")
     except Exception as e:
-        print(f"\n❌ Upload failed: {e}")
+        print(f"\n[ERROR] Upload failed: {e}")
         raise
 
 

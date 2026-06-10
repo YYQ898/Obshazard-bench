@@ -12,6 +12,7 @@ ObsCrisis-Bench is a benchmark for evaluating large vision-language models on **
 - Multi-threaded concurrent requests for efficient evaluation
 - Resume from interrupted evaluation (`--resume`)
 - Hierarchical scoring: **Task → Subtask → Timestep (tx)** level statistics
+- Disaster subtype statistics: **Disaster Type → Disaster Subtype → Task → Subtask → Timestep**
 
 ---
 
@@ -19,27 +20,29 @@ ObsCrisis-Bench is a benchmark for evaluating large vision-language models on **
 
 The benchmark dataset is available on HuggingFace: [ObsCrisis-Bench](https://huggingface.co/datasets/YYQ898/ObsCrisis-Bench)
 
-### Dataset Statistics
+### Dataset Statistics (After Cleaning)
 
 | Category | Events | VQA Samples |
 |----------|--------|-------------|
-| cold-wave | 5 | 154 |
-| earthquake | 10 | 426 |
-| flood | 17 | 580 |
-| heat-wave | 5 | 184 |
-| mass movement (wet) | 6 | 198 |
-| storm | 55 | 2,066 |
-| volcanic activity | 15 | 478 |
-| wildfire | 14 | 513 |
-| **Total** | **127** | **4,599** |
+| cold-wave | 5 | 140 |
+| earthquake | 10 | 417 |
+| flood | 17 | 523 |
+| heat-wave | 5 | 165 |
+| mass movement (wet) | 6 | 189 |
+| storm | 55 | 1,852 |
+| volcanic activity | 15 | 450 |
+| wildfire | 14 | 466 |
+| **Total** | **127** | **4,202** |
+
+**Note**: 397 error samples with incorrect tmax labels have been removed from the dataset.
 
 ### Task Distribution
 
 | Task Category | Samples | Percentage |
 |---------------|---------|------------|
-| Early Warning | 1,524 | 33.14% |
-| Impact Assessment | 2,862 | 62.23% |
-| Recovery Assessment | 213 | 4.63% |
+| Early Warning | 1,424 | 33.89% |
+| Impact Assessment | 2,565 | 61.04% |
+| Recovery Assessment | 213 | 5.07% |
 
 ### Dataset Structure
 
@@ -110,6 +113,7 @@ pip install -r requirements.txt
 Dependencies:
 - `openai==2.21.0`
 - `Pillow==12.1.1`
+- `huggingface-hub` (for uploading to HuggingFace)
 
 ### Download Dataset
 
@@ -119,7 +123,8 @@ pip install huggingface-hub
 huggingface-cli download YYQ898/ObsCrisis-Bench --repo-type dataset --local-dir ./test
 
 # Or using Python
-python scripts/upload_to_huggingface.py  # See script for details
+from huggingface_hub import snapshot_download
+snapshot_download(repo_id="YYQ898/ObsCrisis-Bench", repo_type="dataset", local_dir="./test")
 ```
 
 ---
@@ -213,19 +218,50 @@ Results are saved to `output/eval_result_<dataset>_<model>_<file>_<timestamp>.js
 {
   "summary": {
     "overall": 0.72,
-    "n": 4599,
+    "n": 4202,
+    "total_samples": 4220,
+    "api_errors": 18,
+    "by_disaster_type": {
+      "earthquake": {
+        "overall": 0.41,
+        "n": 397,
+        "by_subtype": {
+          "ground movement": {
+            "overall": 0.35,
+            "n": 217,
+            "by_task": {
+              "Early Warning": {
+                "overall": 0.39,
+                "n": 112,
+                "by_subtask": {
+                  "Risk Detection": {
+                    "overall": 0.85,
+                    "n": 38,
+                    "by_timestep": {
+                      "t1": {"score": 0.90, "n": 10},
+                      "t8": {"score": 0.83, "n": 10},
+                      "t12": {"score": 0.82, "n": 10}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "by_task": {
       "Early Warning": {
         "overall": 0.72,
-        "n": 1524,
+        "n": 1424,
         "by_subtask": {
           "Risk Detection": {
             "overall": 0.85,
-            "n": 381,
+            "n": 356,
             "by_timestep": {
-              "t1": {"score": 0.90, "n": 127},
-              "t8": {"score": 0.83, "n": 127},
-              "t12": {"score": 0.82, "n": 127}
+              "t1": {"score": 0.90, "n": 89},
+              "t8": {"score": 0.83, "n": 89},
+              "t12": {"score": 0.82, "n": 89}
             }
           }
         }
@@ -249,25 +285,73 @@ Results are saved to `output/eval_result_<dataset>_<model>_<file>_<timestamp>.js
 
 ## Utility Scripts
 
-### Dataset Statistics
+### 1. Clean Error Samples
+
+Remove samples with incorrect tmax labels from the dataset:
 
 ```bash
-python scripts/dataset_statistics.py
+python scripts/clean_error_samples.py \
+  --dataset-dir ./test \
+  --dry-run  # Only identify, don't delete
+
+# Actually delete
+python scripts/clean_error_samples.py \
+  --dataset-dir ./test \
+  --eval-results output/eval_result_earthquake_final.json output/eval_result_cold-wave.json
 ```
 
-### Data Analysis
+**What it does**:
+- Identifies samples with Question_id containing "tmax" but using incorrect time steps
+- Removes these error samples from both dataset JSON and evaluation result JSON
+- Generates a cleaning report
+
+### 2. Recompute Statistics
+
+Recompute statistics from evaluation results (e.g., after cleaning):
 
 ```bash
-python scripts/data_analyse.py \
-  --dataset-path ./test/storm_json/All.json \
-  --image-base-path ./test/storm
+python scripts/recompute_statistics.py \
+  --eval-file output/eval_result_earthquake_final.json \
+  --output output/eval_result_earthquake_final_cleaned.json
 ```
 
-### Upload to HuggingFace
+**What it does**:
+- Reads evaluation result JSON
+- Filters out API Error samples
+- Recomputes all statistics (overall, by task, by subtask, by timestep, by disaster type, by disaster subtype)
+- Saves to new JSON file
+
+### 3. Upload to HuggingFace
+
+Upload the dataset to HuggingFace:
 
 ```bash
-python scripts/upload_to_huggingface.py --token YOUR_HF_TOKEN
+# Set HF_TOKEN environment variable
+export HF_TOKEN=your_huggingface_token
+
+# Upload
+python scripts/upload_to_huggingface.py \
+  --folder-path ./test \
+  --repo-id YYQ898/ObsCrisis-Bench \
+  --commit-message "Update dataset"
 ```
+
+**Or provide token directly**:
+```bash
+python scripts/upload_to_huggingface.py \
+  --token YOUR_HF_TOKEN \
+  --folder-path ./test \
+  --repo-id YYQ898/ObsCrisis-Bench
+```
+
+---
+
+## Example Output Files
+
+The `output/` directory contains example evaluation results:
+
+- `eval_result_earthquake_final_cleaned.json` - Earthquake evaluation results (cleaned)
+- `eval_result_cold-wave_json_gpt-5.5_All.json_20260610_144636_cleaned.json` - Cold-wave evaluation results (cleaned)
 
 ---
 
@@ -280,15 +364,15 @@ Extreme-events/
 ├── requirements.txt         # Python dependencies
 ├── environment.yml          # Conda environment
 ├── README.md                # This file
-├── UPLOAD_GUIDE.md          # Upload instructions
 ├── .gitignore              # Git ignore rules
 ├── scripts/
-│   ├── check.py            # Result checking utility
-│   ├── data_analyse.py     # Data analysis script
-│   ├── dataset_statistics.py  # Dataset statistics
-│   ├── upload_to_huggingface.py  # HuggingFace upload script
-│   └── rlaunch_cpu.sh      # Cluster launch script (template)
-└── test/                   # Dataset directory (not in Git)
+│   ├── clean_error_samples.py      # Clean error samples
+│   ├── recompute_statistics.py     # Recompute statistics
+│   └── upload_to_huggingface.py    # Upload to HuggingFace
+├── output/                  # Example output files
+│   ├── eval_result_earthquake_final_cleaned.json
+│   └── eval_result_cold-wave_json_gpt-5.5_All.json_20260610_144636_cleaned.json
+└── test/                    # Dataset directory (not in Git)
     ├── README.md           # Dataset README
     ├── cold-wave_json/
     ├── earthquake_json/
@@ -299,6 +383,30 @@ Extreme-events/
     ├── storm_json/
     ├── volcanic activity_json/
     └── wildfire_json/
+```
+
+---
+
+## Common Issues
+
+### 1. API Error Samples
+
+Some samples may fail due to API errors. These are automatically filtered out during statistics computation:
+- Check `summary.api_errors` in the output JSON
+- Check `summary.total_samples` vs `summary.n` to see how many were filtered
+
+### 2. Resume Interrupted Evaluation
+
+If evaluation is interrupted:
+```bash
+python evaluate.py <args> --resume --resume-file output/eval_result_<timestamp>.json
+```
+
+### 3. Large Dataset Upload
+
+For large datasets, use `upload_large_folder` (automatically used by the script):
+```bash
+python scripts/upload_to_huggingface.py --folder-path ./test
 ```
 
 ---

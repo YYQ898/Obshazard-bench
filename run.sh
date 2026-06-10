@@ -1,7 +1,7 @@
 #!/bin/bash
 # 配置 API 凭据（请设置环境变量或在此处填写）
-# export OPENAI_BASE_URL="YOUR_API_BASE_URL"
-# export OPENAI_API_KEY="YOUR_API_KEY"
+export OPENAI_BASE_URL="http://35.220.164.252:3888/v1"
+export OPENAI_API_KEY="sk-ARPcdL318LhQMYPogsnKd6EJn5GTuEVMAvq9ikdyF6Czs9X4"
 
 # 评测集根目录（请替换为你的实际路径）
 DATA_ROOT=./test
