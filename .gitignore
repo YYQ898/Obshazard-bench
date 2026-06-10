@@ -1,5 +1,29 @@
+# 数据集目录（上传到 HuggingFace，不上传到 GitHub）
+test/
+
+# 输出目录
 output/
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+*.egg
+
+# 系统文件
 .DS_Store
 .env
+*.bak
+*.bak2
+_*
+
+# IDE
+.vscode/
+.idea/
+
+# 临时文件
+*.tmp
+*.log
+*.swp
+*.swo

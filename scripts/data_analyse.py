@@ -1,15 +1,18 @@
 import os
 import json
+import argparse
 from collections import Counter
 from PIL import Image
 from tqdm import tqdm
 
 
-dataset_path = "/mnt/shared-storage-user/intern7shared/gulixin/data/fengwu/0202/storm0201/Image_Only.json"
-image_base_path = "/mnt/shared-storage-user/intern7shared/gulixin/data/fengwu/0202/storm"
+parser = argparse.ArgumentParser()
+parser.add_argument("--dataset-path", type=str, required=True, help="Path to the JSON dataset file")
+parser.add_argument("--image-base-path", type=str, required=True, help="Base path for images")
+args = parser.parse_args()
 
-# dataset_path = "/mnt/shared-storage-user/intern7shared/gulixin/data/fengwu/0202/earthquake0201/Image_Only.json"
-# image_base_path = "/mnt/shared-storage-user/intern7shared/gulixin/data/fengwu/0202/earthquake"
+dataset_path = args.dataset_path
+image_base_path = args.image_base_path
 with open(dataset_path, 'r', encoding='utf-8') as f:
     dataset = json.load(f)
 

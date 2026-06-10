@@ -301,7 +301,7 @@ def evaluate_dataset():
     # # 随机打乱数据集，并取前20条数据，用于调试
     # random.seed(42)
     # random.shuffle(dataset)
-    # dataset = dataset[:5]
+    # dataset = dataset[:20]
     print(f"Loaded {len(dataset)} items from {TARGET_FILE}")
     
     # save results to file
@@ -321,7 +321,8 @@ def evaluate_dataset():
                         dataset.remove(item)
                 print(f"Remaining {len(dataset)} items to evaluate in dataset after resume.")
     else:
-        OUTPUT_FILE = f"eval_result_{BASE_NAME}_{MODEL_NAME}_{TARGET_FILE}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        safe_target = TARGET_FILE.replace('/', '_').replace('\\', '_')
+        OUTPUT_FILE = f"eval_result_{BASE_NAME}_{MODEL_NAME}_{safe_target}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         OUTPUT_FILE = os.path.join(OUTPUT_ROOT, OUTPUT_FILE)
     
     # 1. 构建请求的参数
@@ -332,7 +333,107 @@ def evaluate_dataset():
         gt = str(item.get("Ground truth", ""))
 
         # system prompt
-        system_prompt = "You are an expert AI for disaster assessment from satellite imagery and station data.\n"
+        system_prompt = """
+You are a professional meteorological disaster analysis expert, specializing in analyzing disaster-related issues using multispectral satellite imagery data.
+
+## Data Composition Description
+
+### Satellite Sensors and Band Configuration
+
+You will receive multi-band image data from three satellite sensors:
+
+#### 1. MHS (Microwave Humidity Sounder)
+| Band No. | Center Frequency (GHz) | Bandwidth (MHz) | Polarization | NEΔT (K) |
+|:-------:|:---------------------:|:---------------:|:-----------:|:--------:|
+| 0 | 89.0 | 2800 | QV | 0.22 |
+| 1 | 157.0 | 2800 | QV | 0.38 |
+| 2 | 183.31 ± 1.0 | 1000 | QH | 0.57 |
+| 3 | 183.31 ± 3.0 | 2000 | QH | 0.42 |
+| 4 | 190.311 | 2000 | QV | 0.45 |
+- **Frequency Range**: 89.0 GHz - 190.3 GHz
+- **Number of Bands**: 5 (No. 0-4)
+- **Primary Uses**: Atmospheric humidity profile sounding, precipitation and water vapor distribution monitoring, storm intensity assessment
+
+#### 2. HIRS (High Resolution Infrared Radiation Sounder)
+**Infrared Band Characteristics (Wavelength Range: 0.69 μm - 14.95 μm)**
+| Band No. | Wavelength | Wave Number (cm⁻¹) |
+|:-------:|:----------:|:------------------:|
+| 0 | 14.95 μm | 669 |
+| 1 | 14.71 μm | 680 |
+| 2 | 14.49 μm | 690 |
+| 3 | 14.22 μm | 703 |
+| 4 | 13.97 μm | 716 |
+| 5 | 13.64 μm | 733 |
+| 6 | 13.35 μm | 749 |
+| 7 | 12.47 μm | 802 |
+| 8 | 11.11 μm | 900 |
+| 9 | 9.71 μm | 1030 |
+| 10 | 7.33 μm | 1364 |
+| 11 | 6.52 μm | 1534 |
+| 12 | 4.57 μm | 2188 |
+| 13 | 4.52 μm | 2210 |
+| 14 | 4.47 μm | 2237 |
+| 15 | 4.45 μm | 2247 |
+| 16 | 4.13 μm | 2420 |
+| 17 | 4.00 μm | 2500 |
+| 18 | 3.76 μm | 2660 |
+| 19 | 0.69 μm | N/A |
+- **Number of Bands**: 20 (No. 0-19)
+- **Primary Uses**: High-resolution infrared radiation sounding, cloud top temperature identification, thermal anomaly monitoring, volcanic activity and wildfire detection
+
+#### 3. AMSU-A (Advanced Microwave Sounding Unit-A)
+| Band No. | Center Frequency (GHz) | Bandwidth (MHz) | Polarization | NEΔT (K) |
+|:-------:|:---------------------:|:---------------:|:-----------:|:--------:|
+| 0 | 23.800 | 270 | QV | 0.30 |
+| 1 | 31.400 | 180 | QV | 0.30 |
+| 2 | 50.300 | 180 | QV | 0.40 |
+| 3 | 52.800 | 400 | QV | 0.25 |
+| 4 | 53.596 ± 0.115 | 170 | QH | 0.25 |
+| 5 | 54.400 | 400 | QH | 0.25 |
+| 6 | 54.940 | 400 | QV | 0.25 |
+| 7 | 55.500 | 330 | QH | 0.25 |
+| 8 | 57.290344 | 330 | QH | 0.25 |
+| 9 | f0 ± 0.217 | 78 | QH | 0.40 |
+| 10 | f0 ± 0.3222 ± 0.048 | 36 | QH | 0.40 |
+| 11 | f0 ± 0.3222 ± 0.022 | 16 | QH | 0.60 |
+| 12 | f0 ± 0.3222 ± 0.010 | 8 | QH | 0.80 |
+| 13 | f0 ± 0.3222 ± 0.0045 | 3 | QH | 1.20 |
+| 14 | 89.000 ± 1.0 | 1000 | QV | 0.50 |
+- **Frequency Range**: 23.8 GHz - 89.0 GHz
+- **Number of Bands**: 15 (No. 0-14)
+- **Primary Uses**: Atmospheric temperature and humidity vertical profile sounding, cloud structure monitoring, precipitation intensity assessment, atmospheric stability analysis
+
+### Data File Structure
+
+Each event's data is organized as follows:
+```
+EventID/
+├── AMSU-A/
+│   ├── 0/         (Band 0 directory, contains all time-point images for this band)
+│   │   ├── t1.png
+│   │   ├── t8.png
+│   │   └── ...    (Multiple time-point images)
+│   ├── 1/         (Band 1 directory)
+│   └── ...        (Total 15 band directories, No. 0-14)
+├── HIRS/
+│   ├── 0/         (Band 0 directory, contains all time-point images for this band)
+│   ├── 1/         (Band 1 directory)
+│   └── ...        (Total 20 band directories, No. 0-19)
+└── MHS/
+    ├── 0/         (Band 0 directory, contains all time-point images for this band)
+    ├── 1/         (Band 1 directory)
+    └── ...        (Total 5 band directories, No. 0-4)
+```
+
+### Data Characteristics
+
+- Each band directory (e.g., MHS/0/) contains multiple time-point observation images for that band
+- The numbers in image filenames (e.g., t1, t8, t12) only indicate the chronological order of the images
+- Band data from different sensors provides complementary observation information
+- Meteorological station data (such as temperature, humidity, pressure, etc.) may be provided as auxiliary information
+
+Please analyze and answer questions based on the provided satellite image data.
+"""
         if metadata_context:
             system_prompt += metadata_context
 
@@ -402,8 +503,8 @@ def evaluate_dataset():
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-            raw_resp = resp.choices[0].message.content
-            if hasattr(resp.choices[0].message, "reasoning_content"):
+            raw_resp = resp.choices[0].message.content or ""
+            if hasattr(resp.choices[0].message, "reasoning_content") and resp.choices[0].message.reasoning_content:
                 raw_reasoning_content = resp.choices[0].message.reasoning_content
             extracted = extract_final_answer(raw_resp)
         except Exception as e:
@@ -453,7 +554,9 @@ def evaluate_dataset():
         task_stats[task].append(r["score"])
 
         # 解析Subtask: "Risk Detection (t1)" -> name="Risk Detection", tx="t1"
-        m = re.match(r'(.+?)\s*\((t\d+)\)', subtask_raw)
+        # "Total Deaths (tmax)" -> name="Total Deaths", tx="tmax"
+        # "Total Deaths (tmax-1)" -> name="Total Deaths", tx="tmax-1"
+        m = re.match(r'(.+?)\s*\((tmax-1|tmax|t\d+)\)', subtask_raw)
         if m:
             subtask_name = m.group(1).strip()
             tx = m.group(2)
@@ -495,9 +598,13 @@ def evaluate_dataset():
                 print(f"  {subtask_name}: {st_avg:.4f} (n={len(st_scores)})")
 
                 if task in tx_stats and subtask_name in tx_stats[task]:
-                    # 按t编号数字排序
-                    sorted_tx = sorted(tx_stats[task][subtask_name].keys(),
-                                       key=lambda x: int(x[1:]) if x.startswith('t') and x[1:].isdigit() else 999)
+                    # 排序: t1, t8, t12, ..., tmax-1, tmax
+                    def tx_sort_key(x):
+                        if x == 'tmax-1': return 998
+                        if x == 'tmax': return 999
+                        if x.startswith('t') and x[1:].isdigit(): return int(x[1:])
+                        return 500
+                    sorted_tx = sorted(tx_stats[task][subtask_name].keys(), key=tx_sort_key)
                     for tx in sorted_tx:
                         tx_scores = tx_stats[task][subtask_name][tx]
                         tx_avg = sum(tx_scores) / len(tx_scores) if tx_scores else 0
@@ -523,8 +630,12 @@ def evaluate_dataset():
                     "by_timestep": {}
                 }
                 if task in tx_stats and subtask_name in tx_stats[task]:
-                    sorted_tx = sorted(tx_stats[task][subtask_name].keys(),
-                                       key=lambda x: int(x[1:]) if x.startswith('t') and x[1:].isdigit() else 999)
+                    def tx_sort_key(x):
+                        if x == 'tmax-1': return 998
+                        if x == 'tmax': return 999
+                        if x.startswith('t') and x[1:].isdigit(): return int(x[1:])
+                        return 500
+                    sorted_tx = sorted(tx_stats[task][subtask_name].keys(), key=tx_sort_key)
                     for tx in sorted_tx:
                         tx_scores = tx_stats[task][subtask_name][tx]
                         subtask_entry["by_timestep"][tx] = {
