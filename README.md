@@ -1,6 +1,6 @@
-# ObsCrisis-Bench — Extreme Weather Event Multimodal Evaluation Framework
+# Obshazard-bench — Extreme Weather Event Multimodal Evaluation Framework
 
-ObsCrisis-Bench is a benchmark for evaluating large vision-language models on **extreme weather event** analysis tasks. The evaluation input includes satellite multispectral imagery and weather station sensor data, covering disaster risk assessment, intensity prediction, type classification, and more.
+Obshazard-bench is a benchmark for evaluating large vision-language models on **extreme weather event** analysis tasks. The evaluation input includes satellite multispectral imagery and weather station sensor data, covering disaster risk assessment, intensity prediction, type classification, and more.
 
 ---
 
@@ -18,7 +18,7 @@ ObsCrisis-Bench is a benchmark for evaluating large vision-language models on **
 
 ## Dataset
 
-The benchmark dataset is available on HuggingFace: [ObsCrisis-Bench](https://huggingface.co/datasets/YYQ898/ObsCrisis-Bench)
+The benchmark dataset is available on HuggingFace: [Obshazard-bench](https://huggingface.co/datasets/YYQ898/Obshazard-bench)
 
 ### Dataset Statistics (After Cleaning)
 
@@ -47,7 +47,7 @@ The benchmark dataset is available on HuggingFace: [ObsCrisis-Bench](https://hug
 ### Dataset Structure
 
 ```
-ObsCrisis-Bench/
+Obshazard-bench/
 ├── cold-wave/                          # Satellite imagery
 │   └── cold-wave1/
 │       └── <event_id>/
@@ -120,11 +120,11 @@ Dependencies:
 ```bash
 # Using huggingface-cli
 pip install huggingface-hub
-huggingface-cli download YYQ898/ObsCrisis-Bench --repo-type dataset --local-dir ./test
+huggingface-cli download YYQ898/Obshazard-bench --repo-type dataset --local-dir ./test
 
 # Or using Python
 from huggingface_hub import snapshot_download
-snapshot_download(repo_id="YYQ898/ObsCrisis-Bench", repo_type="dataset", local_dir="./test")
+snapshot_download(repo_id="YYQ898/Obshazard-bench", repo_type="dataset", local_dir="./test")
 ```
 
 ---
@@ -332,7 +332,7 @@ export HF_TOKEN=your_huggingface_token
 # Upload
 python scripts/upload_to_huggingface.py \
   --folder-path ./test \
-  --repo-id YYQ898/ObsCrisis-Bench \
+  --repo-id YYQ898/Obshazard-bench \
   --commit-message "Update dataset"
 ```
 
@@ -341,7 +341,7 @@ python scripts/upload_to_huggingface.py \
 python scripts/upload_to_huggingface.py \
   --token YOUR_HF_TOKEN \
   --folder-path ./test \
-  --repo-id YYQ898/ObsCrisis-Bench
+  --repo-id YYQ898/Obshazard-bench
 ```
 
 ---
@@ -416,12 +416,12 @@ python scripts/upload_to_huggingface.py --folder-path ./test
 If you use this code or dataset, please cite:
 
 ```bibtex
-@misc{obscrisis-bench,
-  title={ObsCrisis-Bench: A Multimodal Benchmark for Extreme Weather Event Analysis},
+@misc{Obshazard-bench,
+  title={Obshazard-bench: A Multimodal Benchmark for Extreme Weather Event Analysis},
   author={YYQ898},
   year={2024},
   publisher={HuggingFace},
-  url={https://huggingface.co/datasets/YYQ898/ObsCrisis-Bench}
+  url={https://huggingface.co/datasets/YYQ898/Obshazard-bench}
 }
 ```
 
@@ -435,4 +435,4 @@ This project is released under the MIT License.
 
 ## Contact
 
-For questions or issues, please open an issue on [GitHub](https://github.com/YYQ898/ObsCrisis-Bench).
+For questions or issues, please open an issue on [GitHub](https://github.com/YYQ898/Obshazard-bench).
